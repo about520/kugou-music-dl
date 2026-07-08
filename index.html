@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>酷狗音乐下载</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f5f5f5;color:#333;max-width:600px;margin:0 auto;padding:16px}
+h2{text-align:center;margin:10px 0 16px;font-size:20px;color:#1a73e8}
+.search-box{display:flex;gap:8px;margin-bottom:16px}
+.search-box input{flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px;outline:none}
+.search-box button{padding:12px 20px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}
+.song-item{display:flex;align-items:center;padding:12px;background:#fff;border-radius:8px;margin-bottom:8px;gap:10px}
+.song-info{flex:1;min-width:0}
+.song-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song-singer{font-size:13px;color:#888;margin-top:2px}
+.btn{flex-shrink:0;padding:8px 14px;border:none;border-radius:6px;font-size:13px;cursor:pointer}
+.btn-down{background:#1a73e8;color:#fff}
+.btn-down:disabled{background:#ccc}
+.btn-vip{background:#ff9800;color:#fff;cursor:not-allowed}
+.loading{text-align:center;padding:30px;color:#888}
+.error{text-align:center;padding:30px;color:#e53935}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:999;display:none;max-width:90%;text-align:center}
+.cnt{text-align:center;color:#ccc;font-size:12px;margin-top:30px}
+</style>
+</head>
+<body>
+<h2>酷狗音乐下载</h2>
+<div class="search-box">
+<input type="text" id="kw" placeholder="输入歌名或歌手..." autofocus>
+<button onclick="search()">搜索</button>
+</div>
+<div id="result"></div>
+<div id="toast" class="toast"></div>
+<div class="cnt">仅支持免费歌曲，VIP歌曲无法下载</div>
+<script>
+// CORS proxy - handles cross-origin API calls
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 2500);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function search() {
+  var kw = document.getElementById('kw').value.trim();
+  if (!kw) return;
+  var btn = document.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = '搜索中...';
+  document.getElementById('result').innerHTML = '<div class="loading">搜索中...</div>';
+
+  var url = CORS_PROXY + encodeURIComponent(
+    'https://songsearch.kugou.com/song_search_v2?keyword=' + encodeURIComponent(kw) +
+    '&page=1&pagesize=15&platform=WebFilter&filter=2&iscorrection=1&privilege_filter=0'
+  );
+
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    btn.disabled = false;
+    btn.textContent = '搜索';
+    var lists = data.data && data.data.lists ? data.data.lists : [];
+    if (!lists.length) {
+      document.getElementById('result').innerHTML = '<div class="error">没有找到相关歌曲</div>';
+      return;
+    }
+    var html = '';
+    lists.forEach(function(item, i) {
+      var name = (item.SongName || '').replace(/<em>/g,'').replace(/<\/em>/g,'');
+      var singer = item.SingerName || '';
+      var hash = item.FileHash || '';
+      var albumId = item.AlbumID || '';
+      var isVip = item.privilege > 0 || (item.PayType && item.PayType !== '');
+      var btnHtml = isVip
+        ? '<button class="btn btn-vip">VIP</button>'
+        : '<button class="btn btn-down" onclick="download(\'' + hash + '\',\'' + albumId + '\',\'' + escapeHtml(name) + '\',\'' + escapeHtml(singer) + '\',this)">下载</button>';
+      html += '<div class="song-item"><div class="song-info"><div class="song-name">' + escapeHtml(name) + '</div><div class="song-singer">' + escapeHtml(singer) + '</div></div>' + btnHtml + '</div>';
+    });
+    document.getElementById('result').innerHTML = html;
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '搜索';
+    document.getElementById('result').innerHTML = '<div class="error">搜索失败，请检查网络后重试</div>';
+  });
+}
+
+function download(hash, albumId, name, singer, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  showToast('正在获取下载链接...');
+
+  var url = CORS_PROXY + encodeURIComponent(
+    'https://m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=' + hash
+  );
+
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    var playUrl = data.url || '';
+    if (!playUrl) {
+      btn.disabled = false;
+      btn.textContent = '失败';
+      btn.style.background = '#e53935';
+      showToast('获取链接失败，可能是VIP歌曲');
+      return;
+    }
+    // Trigger download
+    var a = document.createElement('a');
+    a.href = playUrl;
+    a.download = singer + ' - ' + name + '.mp3';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    btn.textContent = '已下载';
+    btn.style.background = '#4caf50';
+    showToast('下载: ' + singer + ' - ' + name);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = '重试';
+    showToast('下载失败，请重试');
+  });
+}
+
+document.getElementById('kw').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') search();
+});
+</script>
+</body>
+</html>
