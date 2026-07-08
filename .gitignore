@@ -1,0 +1,4 @@
+kugou_downloads/
+__pycache__/
+*.pyc
+*.pyo
