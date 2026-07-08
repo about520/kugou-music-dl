@@ -92,14 +92,14 @@ function search() {
 
 function download(hash, albumId, name, singer, btn) {
   btn.disabled = true;
-  btn.textContent = '0%';
-  showToast('正在获取下载链接...');
+  btn.textContent = '...';
+  showToast('正在获取播放链接...');
 
-  var infoUrl = CORS_PROXY + encodeURIComponent(
+  var url = CORS_PROXY + encodeURIComponent(
     'https://m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=' + hash
   );
 
-  fetch(infoUrl).then(function(r) { return r.json(); }).then(function(data) {
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
     var playUrl = data.url || '';
     if (!playUrl) {
       btn.disabled = false;
@@ -108,47 +108,15 @@ function download(hash, albumId, name, singer, btn) {
       showToast('获取链接失败，可能是VIP歌曲');
       return;
     }
-    // Download via CORS proxy to get Blob
-    var dlUrl = CORS_PROXY + encodeURIComponent(playUrl);
-    fetch(dlUrl).then(function(resp) {
-      var total = parseInt(resp.headers.get('content-length') || '0');
-      var loaded = 0;
-      var reader = resp.body.getReader();
-      var chunks = [];
-      function pump() {
-        return reader.read().then(function(result) {
-          if (result.done) {
-            var blob = new Blob(chunks, {type: 'audio/mpeg'});
-            var blobUrl = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = singer + ' - ' + name + '.mp3';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-            btn.textContent = '已下载';
-            btn.style.background = '#4caf50';
-            showToast('下载完成: ' + singer + ' - ' + name);
-            return;
-          }
-          chunks.push(result.value);
-          loaded += result.value.length;
-          if (total) btn.textContent = Math.round(loaded/total*100) + '%';
-          return pump();
-        });
-      }
-      return pump();
-    }).catch(function() {
-      btn.disabled = false;
-      btn.textContent = '重试';
-      showToast('下载失败，请重试');
-    });
+    // Open audio in new tab for playback
+    window.open(playUrl, '_blank');
+    btn.textContent = '已播放';
+    btn.style.background = '#4caf50';
+    showToast('正在播放: ' + singer + ' - ' + name);
   }).catch(function() {
     btn.disabled = false;
     btn.textContent = '重试';
-    showToast('获取链接失败');
+    showToast('获取链接失败，请重试');
   });
 }
 
