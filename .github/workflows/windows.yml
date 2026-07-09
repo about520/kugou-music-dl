@@ -19,17 +19,20 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "github" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "github" -ErrorAction SilentlyContinue
           
-          # Use localhost.run SSH tunnel for TCP
-          ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 localhost.run 2>&1 | Out-File -FilePath tunnel.txt &
-          Start-Sleep -Seconds 10
+          # Use localhost.run SSH tunnel for TCP  
+          ssh -T -o StrictHostKeyChecking=no -R 0:localhost:3389 localhost.run 2>&1 | Tee-Object -FilePath tunnel.txt &
+          Start-Sleep -Seconds 15
           
           $tunnelOutput = Get-Content tunnel.txt -Raw
-          if ($tunnelOutput -match '(\S+\.lhr\.life):\d+') {
-            $address = $matches[1]
-          } elseif ($tunnelOutput -match '([\d\.]+:\d+)') {
-            $address = $matches[1]
+          Write-Host "Tunnel output: $tunnelOutput"
+          
+          # localhost.run: "Connect to http://XXXX.localhost.run or https://XXXX.localhost.run"
+          # -R 0: assigns a random subdomain with port embedded
+          if ($tunnelOutput -match '([a-zA-Z0-9]+)\.localhost\.run') {
+            $address = $matches[1] + ".localhost.run"
+          } elseif ($tunnelOutput -match '([a-zA-Z0-9]+-[a-zA-Z0-9]+)\.localhost\.run') {
+            $address = $matches[1] + ".localhost.run"
           } else {
-            $address = "(check tunnel.txt)"
             $address = $tunnelOutput
           }
           
