@@ -8,6 +8,15 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
+      - name: Install Chinese Language
+        shell: pwsh
+        run: |
+          Install-Language zh-CN -CopyToSettings
+          Set-WinSystemLocale zh-CN
+          Set-WinHomeLocation -GeoId 45
+          Set-WinUserLanguageList zh-CN -Force
+          Set-WinDefaultInputMethodOverride -InputTip "0804:00000804"
+          
       - name: Setup RDP
         shell: pwsh
         run: |
