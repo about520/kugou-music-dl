@@ -1,0 +1,47 @@
+name: Windows RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    steps:
+      - name: Setup RDP
+        shell: cmd
+        run: |
+          :: Enable RDP
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          
+          :: Create user
+          net user github P@ssw0rd123! /add
+          net localgroup Administrators github /add
+          net localgroup "Remote Desktop Users" github /add
+          
+          :: Download ngrok
+          curl -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
+          tar -xf ngrok.zip
+          
+          :: Auth ngrok
+          ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
+          
+          :: Start ngrok tunnel
+          start ngrok tcp 3389
+          
+          :: Wait for ngrok to start
+          timeout /t 10 /nobreak
+          
+          :: Get tunnel address
+          curl -s http://127.0.0.1:4040/api/tunnels > tunnel.json
+          for /f "tokens=*" %%i in ('powershell -Command "(Get-Content tunnel.json | ConvertFrom-Json).tunnels[0].public_url -replace 'tcp://',''"') do set TUNNEL=%%i
+          
+          echo ========================================
+          echo RDP Address: %TUNNEL%
+          echo Username: github
+          echo Password: P@ssw0rd123!
+          echo ========================================
+          
+          :: Keep alive
+          ping -n 36000 127.0.0.1 > nul
