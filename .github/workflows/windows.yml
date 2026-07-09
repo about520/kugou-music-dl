@@ -19,21 +19,23 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "github" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "github" -ErrorAction SilentlyContinue
           
-          # Use localhost.run SSH tunnel for TCP  
-          ssh -T -o StrictHostKeyChecking=no -R 0:localhost:3389 localhost.run 2>&1 | Tee-Object -FilePath tunnel.txt &
-          Start-Sleep -Seconds 15
+          # Use bore for TCP tunneling (free, no account needed)
+          Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
+          Expand-Archive bore.zip -DestinationPath . -Force
+          Start-Process -NoNewWindow -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -RedirectStandardOutput bore_out.txt -RedirectStandardError bore_err.txt
+          Start-Sleep -Seconds 10
           
-          $tunnelOutput = Get-Content tunnel.txt -Raw
-          Write-Host "Tunnel output: $tunnelOutput"
+          $boreOut = Get-Content bore_out.txt -Raw
+          $boreErr = Get-Content bore_err.txt -Raw
+          Write-Host "Bore stdout: $boreOut"
+          Write-Host "Bore stderr: $boreErr"
           
-          # localhost.run: "Connect to http://XXXX.localhost.run or https://XXXX.localhost.run"
-          # -R 0: assigns a random subdomain with port embedded
-          if ($tunnelOutput -match '([a-zA-Z0-9]+)\.localhost\.run') {
-            $address = $matches[1] + ".localhost.run"
-          } elseif ($tunnelOutput -match '([a-zA-Z0-9]+-[a-zA-Z0-9]+)\.localhost\.run') {
-            $address = $matches[1] + ".localhost.run"
+          if ($boreErr -match 'listening at ([\w\.]+:\d+)') {
+            $address = $matches[1]
+          } elseif ($boreOut -match 'listening at ([\w\.]+:\d+)') {
+            $address = $matches[1]
           } else {
-            $address = $tunnelOutput
+            $address = "$boreOut $boreErr"
           }
           
           Write-Host "========================================"
