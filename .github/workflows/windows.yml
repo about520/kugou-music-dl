@@ -9,39 +9,38 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Setup RDP
-        shell: cmd
+        shell: pwsh
         run: |
-          :: Enable RDP
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
-          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          # Enable RDP
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           
-          :: Create user
-          net user github P@ssw0rd123! /add
-          net localgroup Administrators github /add
-          net localgroup "Remote Desktop Users" github /add
+          # Create user
+          $password = ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force
+          New-LocalUser -Name "github" -Password $password -FullName "GitHub User"
+          Add-LocalGroupMember -Group "Administrators" -Member "github"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "github"
           
-          :: Download ngrok
-          curl -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
-          tar -xf ngrok.zip
+          # Download ngrok
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile ngrok.zip
+          Expand-Archive ngrok.zip -DestinationPath . -Force
           
-          :: Auth ngrok
-          ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
+          # Auth and start tunnel
+          .\ngrok.exe config add-authtoken $env:NGROK_TOKEN
+          Start-Process -NoNewWindow -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+          Start-Sleep -Seconds 15
           
-          :: Start ngrok tunnel
-          start ngrok tcp 3389
+          # Get tunnel URL
+          $tunnelInfo = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+          $address = $tunnelInfo.tunnels[0].public_url -replace 'tcp://', ''
           
-          :: Wait for ngrok to start
-          timeout /t 10 /nobreak
+          Write-Host "========================================"
+          Write-Host "RDP Address: $address"
+          Write-Host "Username: github"
+          Write-Host "Password: P@ssw0rd123!"
+          Write-Host "========================================"
           
-          :: Get tunnel address
-          curl -s http://127.0.0.1:4040/api/tunnels > tunnel.json
-          for /f "tokens=*" %%i in ('powershell -Command "(Get-Content tunnel.json | ConvertFrom-Json).tunnels[0].public_url -replace 'tcp://',''"') do set TUNNEL=%%i
-          
-          echo ========================================
-          echo RDP Address: %TUNNEL%
-          echo Username: github
-          echo Password: P@ssw0rd123!
-          echo ========================================
-          
-          :: Keep alive
-          ping -n 36000 127.0.0.1 > nul
+          # Keep alive
+          Start-Sleep -Seconds 21600
+        env:
+          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
