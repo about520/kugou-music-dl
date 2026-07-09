@@ -11,28 +11,27 @@ jobs:
       - name: Setup RDP
         shell: pwsh
         run: |
-          # Enable RDP
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           
-          # Create user
           $password = ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force
-          New-LocalUser -Name "github" -Password $password -FullName "GitHub User"
-          Add-LocalGroupMember -Group "Administrators" -Member "github"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "github"
+          New-LocalUser -Name "github" -Password $password -FullName "GitHub User" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "github" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "github" -ErrorAction SilentlyContinue
           
-          # Download ngrok
-          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile ngrok.zip
-          Expand-Archive ngrok.zip -DestinationPath . -Force
+          # Use localhost.run SSH tunnel for TCP
+          ssh -o StrictHostKeyChecking=no -R 0:localhost:3389 localhost.run 2>&1 | Out-File -FilePath tunnel.txt &
+          Start-Sleep -Seconds 10
           
-          # Auth and start tunnel
-          .\ngrok.exe config add-authtoken $env:NGROK_TOKEN
-          Start-Process -NoNewWindow -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
-          Start-Sleep -Seconds 15
-          
-          # Get tunnel URL
-          $tunnelInfo = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-          $address = $tunnelInfo.tunnels[0].public_url -replace 'tcp://', ''
+          $tunnelOutput = Get-Content tunnel.txt -Raw
+          if ($tunnelOutput -match '(\S+\.lhr\.life):\d+') {
+            $address = $matches[1]
+          } elseif ($tunnelOutput -match '([\d\.]+:\d+)') {
+            $address = $matches[1]
+          } else {
+            $address = "(check tunnel.txt)"
+            $address = $tunnelOutput
+          }
           
           Write-Host "========================================"
           Write-Host "RDP Address: $address"
@@ -40,7 +39,5 @@ jobs:
           Write-Host "Password: P@ssw0rd123!"
           Write-Host "========================================"
           
-          # Keep alive
           Start-Sleep -Seconds 21600
-        env:
-          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
+          Write-Host "Time up"
